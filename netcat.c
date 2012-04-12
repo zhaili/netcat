@@ -33,6 +33,7 @@
 #include "generic.h"		/* same as with L5, skey, etc */
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
 #pragma comment (lib, "ws2_32") /* winsock support */
 #endif
 
@@ -88,7 +89,7 @@
 
 #ifdef WIN32
 #include "getopt.h"
-#define sleep			_sleep
+#define sleep			Sleep
 #define strcasecmp		strcmpi
 #define EADDRINUSE		WSAEADDRINUSE
 #define ETIMEDOUT		WSAETIMEDOUT
@@ -114,7 +115,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include <conio.h>
-//#include <winsock2.h>
+#include <winsock2.h>
 #endif
 
 #include <stdio.h>
@@ -361,7 +362,7 @@ void bail (str, p1, p2, p3, p4, p5, p6)
   o_verbose = 1;
   holler (str, p1, p2, p3, p4, p5, p6);
 #ifdef WIN32
-  shutdown(netfd, 0x02);  /* Kirby */
+  shutdown(netfd, SD_BOTH);  /* Kirby */
   closesocket (netfd);
 #else
   close (netfd);
@@ -957,7 +958,7 @@ int doconnect (rad, rp, lad, lp)
     return (nnetfd);
 #ifdef WIN32
   errno = h_errno;
-  shutdown(nnetfd, 0x02);  /* Kirby */
+  shutdown(nnetfd, SD_BOTH);  /* Kirby */
   closesocket (nnetfd);
   WSASetLastError(errno); /* don't want to lose connect error */
 #else
@@ -1059,7 +1060,7 @@ Debug (("dolisten/recvfrom ding, rr = %d, netbuf %s ", rr, bigbuf_net))
     goto dol_tmo;		/* timeout */
   arm (0, 0);
 #ifdef WIN32
-  shutdown(nnetfd, 0x02);  /* Kirby */
+  shutdown(nnetfd, SD_BOTH);  /* Kirby */
   closesocket (nnetfd);
 #else
   close (nnetfd);		/* dump the old socket */
@@ -1148,7 +1149,7 @@ dol_tmo:
   errno = ETIMEDOUT;			/* fake it */
 dol_err:
 #ifdef WIN32
-  shutdown(nnetfd, 0x02);  /* Kirby */
+  shutdown(nnetfd, SD_BOTH);  /* Kirby */
   closesocket (nnetfd);
 #else
   close (nnetfd);
@@ -1192,7 +1193,7 @@ udptest (fd, where)
     rr = doconnect (where, SLEAZE_PORT, 0, 0);
     if (rr > 0)
 #ifdef WIN32
-	  shutdown(fd, 0x02);  /* Kirby */
+	  shutdown(fd, SD_BOTH);  /* Kirby */
 	  closesocket (rr);
 #else
       close (rr);			/* in case it *did* open */
@@ -1209,7 +1210,7 @@ udptest (fd, where)
   if (rr == 1)				/* if write error, no UDP listener */
     return (fd);
 #ifdef WIN32
-  shutdown(fd, 0x02);  /* Kirby */
+  shutdown(fd, SD_BOTH);  /* Kirby */
   closesocket (fd);
 #else
   close (fd);				/* use it or lose it! */
@@ -1457,7 +1458,7 @@ int readwrite (fd)
 		  foo = h_errno;
 		  holler ("select fuxored");
 #ifdef WIN32
-		  shutdown(fd, 0x02);  /* Kirby */
+		  shutdown(fd, SD_BOTH);  /* Kirby */
 		  closesocket (fd);
 #else
 		  close (fd);
@@ -1484,7 +1485,7 @@ int readwrite (fd)
 		if ( o_wait > 0 && (current - start) > timer1->tv_sec)	{
 			if (o_verbose > 1)		/* normally we don't care */
 				holler ("net timeout");
-			shutdown(fd, 0x02);  /* Kirby */
+			shutdown(fd, SD_BOTH);  /* Kirby */
 			closesocket (fd);
 			FD_ZERO(ding1);
 			WSASetLastError(0); 
@@ -1644,7 +1645,7 @@ Debug (("wrote %d to net, errno %d", rr, errno))
    the net again after a timeout.  I haven't seen any screwups yet, but it's
    not like my test network is particularly busy... */
 #ifdef WIN32
-  shutdown(fd, 0x02);  /* Kirby */
+  shutdown(fd, SD_BOTH);  /* Kirby */
   closesocket (fd);
 #else
   close (fd);
@@ -1766,17 +1767,13 @@ recycle:
 	pr00gie = optarg;
 	break;
 #endif
-	        case 'L':				/* listen then cycle back to start instead of exiting */
-	o_listen++; 
-  	cycle = 1;
-	  break;
-
-
-        case 'd':				/* detach from console */
-  	FreeConsole();;
-	  break;
-
-
+      case 'L':				/* listen then cycle back to start instead of exiting */
+    o_listen++; 
+    cycle = 1;
+    break;
+      case 'd':				/* detach from console */
+    FreeConsole();;
+    break;
       case 'G':				/* srcrt gateways pointer val */
 	x = atoi (optarg);
 	if ((x) && (x == (x & 0x1c)))	/* mask off bits of fukt values */
@@ -1862,7 +1859,7 @@ recycle:
   FD_SET (0, ding1);			/* stdin *is* initially open */
 #endif
   if (o_random) {
-    SRAND (time (0));
+      SRAND ((unsigned int)time (0));
     randports = Hmalloc (65536);	/* big flag array for ports */
   }
 #ifdef GAPING_SECURITY_HOLE
@@ -2007,7 +2004,7 @@ Debug (("netfd %d from port %d to port %d", netfd, ourport, curport))
 	    whereto->name, whereto->addrs[0], curport, portpoop->name);
       } /* if netfd */
 #ifdef WIN32
-	  shutdown(netfd, 0x02);  /* Kirby */
+	  shutdown(netfd, SD_BOTH);  /* Kirby */
       closesocket (netfd);			/* just in case we didn't already */
 #else
       close (netfd);			/* just in case we didn't already */

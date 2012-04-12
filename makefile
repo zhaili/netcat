@@ -2,7 +2,7 @@
 cc=cl
 link=link
 
-cflags=/nologo /W3 /EHsc /O2 /D "NDEBUG" /D "WIN32" /D "_CONSOLE" /D "TELNET" /D "GAPING_SECURITY_HOLE" /FD /c 
+cflags=/nologo /W3 /EHsc /MT /O2 /D "NDEBUG" /D "WIN32" /D "_CONSOLE" /D "TELNET" /D "GAPING_SECURITY_HOLE" /D "_CRT_SECURE_NO_WARNINGS" /D "_CRT_NONSTDC_NO_DEPRECATE" /FD /c 
 lflags=kernel32.lib user32.lib wsock32.lib winmm.lib /nologo /subsystem:console /incremental:yes /machine:I386 /out:nc.exe
 
 all: nc.exe
@@ -19,6 +19,8 @@ netcat.obj: netcat.c
 
 nc.exe: getopt.obj doexec.obj netcat.obj
     $(link) getopt.obj doexec.obj netcat.obj $(lflags)
+
+rebuild: clean nc.exe
 
 clean:
     del *.obj *.exe *.ilk *.idb

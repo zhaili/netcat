@@ -12,6 +12,10 @@
 
 #ifdef GAPING_SECURITY_HOLE
 
+#ifdef WIN32
+#define itoa     _itoa
+#define strnicmp _strnicmp
+#endif
 
 #define BUFFER_SIZE 200
 
