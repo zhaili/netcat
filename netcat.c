@@ -325,7 +325,11 @@ int error;
 }
 #endif
 
-
+__inline void myclose(int netfd)
+{
+	shutdown(netfd, SD_BOTH);
+	closesocket (netfd);
+}
 
 
 
@@ -361,12 +365,9 @@ void bail (str, p1, p2, p3, p4, p5, p6)
 {
   o_verbose = 1;
   holler (str, p1, p2, p3, p4, p5, p6);
-#ifdef WIN32
-  shutdown(netfd, SD_BOTH);  /* Kirby */
-  closesocket (netfd);
-#else
-  close (netfd);
-#endif
+
+  myclose(netfd);
+
   sleep (1);
   exit (1);
 } /* bail */
@@ -764,12 +765,9 @@ doexec (fd)
   register char * p;
 
   dup2 (fd, 0);				/* the precise order of fiddlage */
-#ifdef WIN32
-  shutdown(fd, SD_BOTH);  /* Kirby */
-  closesocket (fd);
-#else
-  close (fd);				/* is apparently crucial; this is */
-#endif
+
+  myclose (fd);				/* is apparently crucial; this is */
+
   dup2 (0, 1);				/* swiped directly out of "inetd". */
   dup2 (0, 2);
   p = strrchr (pr00gie, '/');		/* shorter argv[0] */
@@ -956,14 +954,11 @@ int doconnect (rad, rp, lad, lp)
   arm (0, 0);
   if (rr == 0)
     return (nnetfd);
-#ifdef WIN32
+
   errno = h_errno;
-  shutdown(nnetfd, SD_BOTH);  /* Kirby */
-  closesocket (nnetfd);
+  myclose(nnetfd);
   WSASetLastError(errno); /* don't want to lose connect error */
-#else
-  close (nnetfd);			/* clean up junked socket FD!! */
-#endif
+
   return (-1);
 } /* doconnect */
 
@@ -1059,12 +1054,9 @@ Debug (("dolisten/recvfrom ding, rr = %d, netbuf %s ", rr, bigbuf_net))
   } else
     goto dol_tmo;		/* timeout */
   arm (0, 0);
-#ifdef WIN32
-  shutdown(nnetfd, SD_BOTH);  /* Kirby */
-  closesocket (nnetfd);
-#else
-  close (nnetfd);		/* dump the old socket */
-#endif
+
+  myclose (nnetfd);
+
   nnetfd = rr;			/* here's our new one */
 
 whoisit:
@@ -1148,12 +1140,9 @@ dol_noop:
 dol_tmo:
   errno = ETIMEDOUT;			/* fake it */
 dol_err:
-#ifdef WIN32
-  shutdown(nnetfd, SD_BOTH);  /* Kirby */
-  closesocket (nnetfd);
-#else
-  close (nnetfd);
-#endif
+
+  myclose (nnetfd);
+
   return (-1);
 } /* dolisten */
 
@@ -1167,19 +1156,14 @@ dol_err:
    Use the time delay between writes if given, otherwise use the "tcp ping"
    trick for getting the RTT.  [I got that idea from pluvius, and warped it.]
    Return either the original fd, or clean up and return -1. */
-udptest (fd, where)
-  int fd;
-  IA * where;
+udptest (int fd, IA* where)
 {
-  register int rr;
+  int rr;
 
-#ifdef WIN32
   rr = send (fd, bigbuf_in, 1, 0);
-#else
-  rr = write (fd, bigbuf_in, 1);
-#endif
+
   if (rr != 1)
-    holler ("udptest first write failed?! errno %d", errno);
+      holler ("udptest first write failed?! errno %d", errno);
   if (o_wait)
     sleep (o_wait);
   else {
@@ -1192,29 +1176,20 @@ udptest (fd, where)
     o_wait = 5;				/* XXX: enough to notice?? */
     rr = doconnect (where, SLEAZE_PORT, 0, 0);
     if (rr > 0)
-#ifdef WIN32
-	  shutdown(fd, SD_BOTH);  /* Kirby */
-	  closesocket (rr);
-#else
-      close (rr);			/* in case it *did* open */
-#endif
+        myclose(rr);
+
     o_wait = 0;				/* reset it */
     o_udpmode++;			/* we *are* still doing UDP, right? */
   } /* if o_wait */
   errno = 0;				/* clear from sleep */
-#ifdef WIN32
+
   rr = send (fd, bigbuf_in, 1, 0);
-#else
-  rr = write (fd, bigbuf_in, 1);
-#endif
+
   if (rr == 1)				/* if write error, no UDP listener */
     return (fd);
-#ifdef WIN32
-  shutdown(fd, SD_BOTH);  /* Kirby */
-  closesocket (fd);
-#else
-  close (fd);				/* use it or lose it! */
-#endif
+
+  myclose (fd);				/* use it or lose it! */
+
   return (-1);
 } /* udptest */
 
@@ -1452,42 +1427,26 @@ int readwrite (int fd)
 #endif
 		  foo = h_errno;
 		  holler ("select fuxored");
-#ifdef WIN32
-		  shutdown(fd, SD_BOTH);  /* Kirby */
-		  closesocket (fd);
-#else
-		  close (fd);
-#endif
+
+		  myclose (fd);
+
 		  return (1);
 		}
     } /* select fuckup */
 /* if we have a timeout AND stdin is closed AND we haven't heard anything
    from the net during that time, assume it's dead and close it too. */
-#ifndef WIN32  /* (weld) need to write some code here */
-    if (rr == 0) {
-	if (! FD_ISSET (0, ding1))
-	  netretry--;			/* we actually try a coupla times. */
-	if (! netretry) {
-	  if (o_verbose > 1)		/* normally we don't care */
-	    holler ("net timeout");
-	  close (fd);
-	  return (0);			/* not an error! */
-		}
-    } /* select timeout */
-#else
 	if (rr == 0) {
 		time( &current );
 		if ( o_wait > 0 && (current - start) > timer1->tv_sec)	{
 			if (o_verbose > 1)		/* normally we don't care */
 				holler ("net timeout");
-			shutdown(fd, SD_BOTH);  /* Kirby */
-			closesocket (fd);
+			myclose (fd);
 			FD_ZERO(ding1);
 			WSASetLastError(0); 
 			return (0);			/* not an error! */
 		}
     } /* select timeout */
-#endif
+
 /* xxx: should we check the exception fds too?  The read fds seem to give
    us the right info, and none of the examples I found bothered. */
 
@@ -1641,12 +1600,9 @@ Debug (("wrote %d to net, errno %d", rr, errno))
    blocking reads and writes and my own manual "last ditch" efforts to read
    the net again after a timeout.  I haven't seen any screwups yet, but it's
    not like my test network is particularly busy... */
-#ifdef WIN32
-  shutdown(fd, SD_BOTH);  /* Kirby */
-  closesocket (fd);
-#else
-  close (fd);
-#endif
+
+  myclose (fd);
+
   return (0);
 } /* readwrite */
 
@@ -1859,13 +1815,13 @@ recycle:
       SRAND ((unsigned int)time (0));
     randports = Hmalloc (65536);	/* big flag array for ports */
   }
-#ifdef GAPING_SECURITY_HOLE
+//#ifdef GAPING_SECURITY_HOLE
   if (pr00gie) {
     close (0);				/* won't need stdin */
     o_wfile = 0;			/* -o with -e is meaningless! */
     ofd = 0;
   }
-#endif /* G_S_H */
+//#endif /* G_S_H */
   if (o_wfile) {
     ofd = open (stage, O_WRONLY | O_CREAT | O_TRUNC, 0664);
     if (ofd <= 0)			/* must be > extant 0/1/2 */
@@ -2000,12 +1956,9 @@ Debug (("netfd %d from port %d to port %d", netfd, ourport, curport))
 	  holler ("%s [%s] %d (%s)",
 	    whereto->name, whereto->addrs[0], curport, portpoop->name);
       } /* if netfd */
-#ifdef WIN32
-	  shutdown(netfd, SD_BOTH);  /* Kirby */
-      closesocket (netfd);			/* just in case we didn't already */
-#else
-      close (netfd);			/* just in case we didn't already */
-#endif
+
+      myclose (netfd);			/* just in case we didn't already */
+
       if (o_interval)
 	sleep (o_interval);		/* if -i, delay between ports too */
       if (o_random)
@@ -2033,7 +1986,6 @@ Debug (("netfd %d from port %d to port %d", netfd, ourport, curport))
   return(0);
 } /* main */
 
-#ifdef HAVE_HELP		/* unless we wanna be *really* cryptic */
 /* helpme :
    the obvious */
 int helpme()
@@ -2046,10 +1998,9 @@ options:");
   holler ("\
 	-d		detach from console, background mode\n");
 
-#ifdef GAPING_SECURITY_HOLE	/* needs to be separate holler() */
   holler ("\
 	-e prog		inbound program to exec [dangerous!!]");
-#endif
+
   holler ("\
 	-g gateway	source-routing hop point[s], up to 8\n\
 	-G num		source-routing pointer: 4, 8, 12, ...\n\
@@ -2074,7 +2025,6 @@ options:");
   bail ("port numbers can be individual or ranges: m-n [inclusive]");
   return(0);
 } /* helpme */
-#endif /* HAVE_HELP */
 
 
 
