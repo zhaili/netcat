@@ -1360,12 +1360,7 @@ notiac:
 /* readwrite :
    handle stdin/stdout/network I/O.  Bwahaha!! -- the select loop from hell.
    In this instance, return what might become our exit status. */
-int readwrite (fd)
-#ifdef WIN32
-  unsigned int fd;
-#else
-  int fd;
-#endif
+int readwrite (int fd)
 {
   register int rr;
   register char * zp;		/* stdin buf ptr */
@@ -1571,6 +1566,7 @@ Debug (("got %d from the net, errno %d", rr, errno))
 		rr = read (0, bigbuf_in, BIGSIZ);
 		if (rr <= 0) {			/* at end, or fukt, or ... */
 			close (0);
+			return (1);
 		} else {
 			rzleft = rr;
 			zp = bigbuf_in;
@@ -1579,6 +1575,7 @@ Debug (("got %d from the net, errno %d", rr, errno))
 			if (! Single) {		/* we might be scanning... */
 				insaved = rr;		/* save len */
 				close (0);			/* really, I mean it */
+                return (1);
 			} /* Single */
 		} /* if rr/read */
 	}
