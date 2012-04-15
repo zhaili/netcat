@@ -143,7 +143,7 @@ struct port_poop {
 #define PINF struct port_poop
 
 /* globals: */
-jmp_buf jbuf;			/* timer crud */
+//jmp_buf jbuf;			/* timer crud */
 int jval = 0;			/* timer crud */
 int netfd = -1;
 int ofd = 0;			/* hexdump output fd */
@@ -181,7 +181,7 @@ unsigned char * stage = NULL;	/* hexdump line buffer */
 
 #ifdef WIN32
   char * setsockopt_c;
-  int nnetfd;
+  int g_nnetfd;
 #endif
 
 /* global cmd flags: */
@@ -320,20 +320,24 @@ char * winsockstr(int error)
    fake varargs -- need to do this way because we wind up calling through
    more levels of indirection than vanilla varargs can handle, and not all
    machines have vfprintf/vsyslog/whatever!  6 params oughta be enough. */
-void holler (str, p1, p2, p3, p4, p5, p6)
-  char * str;
-  char * p1, * p2, * p3, * p4, * p5, * p6;
+void holler (char* str, ...)
 {
-  if (o_verbose) {
-    fprintf (stderr, str, p1, p2, p3, p4, p5, p6);
+	va_list vl;
 
-	if (h_errno)
-		fprintf (stderr, ": %s\n",winsockstr(h_errno));
-	else
-      fprintf (stderr, "\n");
+	va_start( vl, str );     /* Initialize variable arguments. */
 
-    fflush (stderr);
-  }
+	if (o_verbose) {
+		vfprintf (stderr, str, vl);
+
+		if (h_errno)
+			fprintf (stderr, ": %s\n",winsockstr(h_errno));
+		else
+			fprintf (stderr, "\n");
+
+		fflush (stderr);
+	}
+
+	va_end( vl );
 } /* holler */
 
 /* bail :
@@ -352,7 +356,7 @@ void bail (str, p1, p2, p3, p4, p5, p6)
 } /* bail */
 
 
-UINT theTimer;
+//UINT theTimer;
 
 /* Hmalloc :
    malloc up what I want, rounded up to *4, and pre-zeroed.  Either succeeds
@@ -372,12 +376,10 @@ char * Hmalloc (unsigned int size)
    find the next newline in a buffer; return inclusive size of that "line",
    or the entire buffer size, so the caller knows how much to then write().
    Not distinguishing \n vs \r\n for the nonce; it just works as is... */
-unsigned int findline (buf, siz)
-  char * buf;
-  unsigned int siz;
+unsigned int findline (char* buf, unsigned int siz)
 {
-  register char * p;
-  register int x;
+  char * p;
+  int x;
   if (! buf)			/* various sanity checks... */
     return (0);
   if (siz > BIGSIZ)
@@ -533,18 +535,12 @@ HINF * gethostpoop (name, numeric)
 	pnum to reverse-resolve something that's already a number.
    If o_nflag is on, fill in what we can but skip the getservby??? stuff.
    Might as well have consistent behavior here... */
-USHORT getportpoop (pstring, pnum)
-  char * pstring;
-  unsigned int pnum;
+USHORT getportpoop (char* pstring, unsigned int pnum)
 {
   struct servent * servent;
-#ifndef WIN32
-  register int x;
-  register int y;
-#else
   u_short x;
   u_short y;
-#endif
+
   char * whichp = p_tcp;
   if (o_udpmode)
     whichp = p_udp;
@@ -618,11 +614,10 @@ gp_finish:
 	1	to be tested
 	2	tested [which is set as we find them here]
    returns a USHORT random port, or 0 if all the t-b-t ones are used up. */
-USHORT nextport (block)
-  char * block;
+USHORT nextport (char* block)
 {
-  register unsigned int x;
-  register unsigned int y;
+  unsigned int x;
+  unsigned int y;
 
   y = 70000;			/* high safety count for rnd-tries */
   while (y > 0) {
@@ -654,10 +649,7 @@ USHORT nextport (block)
 /* loadports :
    set "to be tested" indications in BLOCK, from LO to HI.  Almost too small
    to be a separate routine, but makes main() a little cleaner... */
-void loadports (block, lo, hi)
-  char * block;
-  USHORT lo;
-  USHORT hi;
+void loadports (char* block, USHORT lo, USHORT hi)
 {
   USHORT x;
 
@@ -689,22 +681,26 @@ int doconnect (IA* rad, USHORT rp, IA* lad, USHORT lp)
   register int nnetfd;
 #endif
   int rr;
-  int x, y;
+  int y;
 
   errno = 0;
   WSASetLastError(0);
 
-  nnetfd = socket (AF_INET, SOCK_DGRAM, o_udpmode ? IPPROTO_UDP : IPPROTO_TCP);
+  if (o_udpmode)
+	  g_nnetfd = socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  else
+	  g_nnetfd = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-  if (nnetfd < 0)
-    bail ("Can't get socket");
-  if (nnetfd == 0)		/* might *be* zero if stdin was closed! */
-    nnetfd = dup (nnetfd);	/* so fix it.  Leave the old 0 hanging. */
+  if (g_nnetfd == INVALID_SOCKET)
+	  bail ("Can't get socket");
 
-  rr = setsockopt (nnetfd, SOL_SOCKET, SO_REUSEADDR, (const char FAR *)setsockopt_c, sizeof (setsockopt_c));
+  if (g_nnetfd == 0)		/* might *be* zero if stdin was closed! */
+    g_nnetfd = dup (g_nnetfd);	/* so fix it.  Leave the old 0 hanging. */
+
+  rr = setsockopt (g_nnetfd, SOL_SOCKET, SO_REUSEADDR, (const char FAR *)setsockopt_c, sizeof (setsockopt_c));
 
   if (rr == -1)
-    holler ("nnetfd reuseaddr failed");		/* ??? */
+    holler ("nnetfd reuseaddr failed");
 
 /* fill in all the right sockaddr crud */
   lclend->sin_family = AF_INET;
@@ -717,10 +713,10 @@ int doconnect (IA* rad, USHORT rp, IA* lad, USHORT lp)
     lclend->sin_port = htons (lp);
   rr = 0;
   if (lad || lp) {
-	  x = (int) lp;
+	  //x = (int) lp;
 	  /* try a few times for the local bind, a la ftp-data-port... */
 	  for (y = 4; y > 0; y--) {
-		  rr = bind (nnetfd, (SA *)lclend, sizeof (SA));
+		  rr = bind (g_nnetfd, (SA *)lclend, sizeof (SA));
 		  if (rr == 0)
 			  break;
 		  if (errno != EADDRINUSE)
@@ -737,7 +733,7 @@ int doconnect (IA* rad, USHORT rp, IA* lad, USHORT lp)
 	inet_ntoa(lclend->sin_addr), lp);
 
   if (o_listen)
-    return (nnetfd);			/* thanks, that's all for today */
+    return (g_nnetfd);			/* thanks, that's all for today */
 
   memcpy (&remend->sin_addr.s_addr, rad, sizeof (IA));
   remend->sin_port = htons (rp);
@@ -750,22 +746,23 @@ int doconnect (IA* rad, USHORT rp, IA* lad, USHORT lp)
   } /* if gatesidx */
 
 /* wrap connect inside a timer, and hit it */
-  if (setjmp (jbuf) == 0) {
-    rr = connect (nnetfd, (SA *)remend, sizeof (SA));
-  } 
-  else {				/* setjmp: connect failed... */
-    rr = -1;
-    WSASetLastError(WSAETIMEDOUT);			/* fake it */
-  }
+//  if (setjmp (jbuf) == 0) {
+    rr = connect (g_nnetfd, (SA *)remend, sizeof (SA));
+  //} 
+  //else {				/* setjmp: connect failed... */
+  //  rr = -1;
+  //  WSASetLastError(WSAETIMEDOUT);			/* fake it */
+  //}
   if (rr == 0)
-    return (nnetfd);
+    return (g_nnetfd);
 
   errno = h_errno;
-  myclose(nnetfd);
+  myclose(g_nnetfd);
   WSASetLastError(errno); /* don't want to lose connect error */
 
   return (-1);
 } /* doconnect */
+
 
 /* dolisten :
    just like doconnect, and in fact calls a hunk of doconnect, but listens for
@@ -823,12 +820,12 @@ int dolisten (IA* rad, USHORT rp, IA* lad, USHORT lp)
    actually does work after all.  Yow.  YMMV on strange platforms!  */
   if (o_udpmode) {
     x = sizeof (SA);		/* retval for recvfrom */
-    if (setjmp (jbuf) == 0) {	/* do timeout for initial connect */
+    /*if (setjmp (jbuf) == 0) {*/	/* do timeout for initial connect */
       rr = recvfrom		/* and here we block... */
 	(nnetfd, bigbuf_net, BIGSIZ, MSG_PEEK, (SA *) remend, &x);
 Debug (("dolisten/recvfrom ding, rr = %d, netbuf %s ", rr, bigbuf_net))
-    } else
-      goto dol_tmo;		/* timeout */
+    //} else
+    //  goto dol_tmo;		/* timeout */
 /* I'm not completely clear on how this works -- BSD seems to make UDP
    just magically work in a connect()ed context, but we'll undoubtedly run
    into systems this deal doesn't work on.  For now, we apparently have to
@@ -847,10 +844,10 @@ Debug (("dolisten/recvfrom ding, rr = %d, netbuf %s ", rr, bigbuf_net))
 
 /* fall here for TCP */
   x = sizeof (SA);		/* retval for accept */
-  if (setjmp (jbuf) == 0) {
+  //if (setjmp (jbuf) == 0) {
     rr = accept (nnetfd, (SA *)remend, &x);
-  } else
-    goto dol_tmo;		/* timeout */
+/*  } else
+    goto dol_tmo;	*/	/* timeout */
 
   myclose (nnetfd);
 
